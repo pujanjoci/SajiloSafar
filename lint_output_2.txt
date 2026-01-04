@@ -1,0 +1,10 @@
+﻿
+> sajilo-safar@0.0.0 lint
+> eslint .
+
+
+D:\Code\React-Vite(Projects)\sajilo-safar\src\context\BookingContext.jsx
+  34:36  error  '_date' is defined but never used  no-unused-vars
+
+Ô£û 1 problem (1 error, 0 warnings)
+
