@@ -1,12 +1,17 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useCallback } from 'react';
 import { buses as initialBuses } from '../data/buses';
 import { bookings as initialBookings } from '../data/bookings';
 import { routes } from '../data/routes';
 
-/* eslint-disable react-refresh/only-export-components */
 const BookingContext = createContext();
 
-export const useBooking = () => useContext(BookingContext);
+export const useBooking = () => {
+    const context = useContext(BookingContext);
+    if (!context) {
+        throw new Error('useBooking must be used within BookingProvider');
+    }
+    return context;
+};
 
 export const BookingProvider = ({ children }) => {
     const [buses, setBuses] = useState(initialBuses);
@@ -17,71 +22,110 @@ export const BookingProvider = ({ children }) => {
         date: ''
     });
 
-    const searchBuses = (from, to, date) => {
+    const searchBuses = useCallback((from, to, date) => {
         setSearchParams({ from, to, date });
-        // In a real app, we would filter based on date too, 
-        // but for this mock, we'll just filter by route
-        return buses.filter(bus =>
-            bus.route.toLowerCase().includes(from.toLowerCase()) &&
-            bus.route.toLowerCase().includes(to.toLowerCase())
+
+        const selectedRoute = routes.find(
+            r => r.from.toLowerCase() === from.toLowerCase() &&
+                r.to.toLowerCase() === to.toLowerCase()
         );
-    };
 
-    const getBusById = (id) => {
+        if (!selectedRoute) return [];
+
+        return buses.filter(bus => {
+            const rules = bus.rules || {};
+
+            // Apply business rules
+            if (rules.allowedDestinations &&
+                !rules.allowedDestinations.includes(selectedRoute.to)) {
+                return false;
+            }
+
+            if (rules.allowedTypes &&
+                !rules.allowedTypes.includes(selectedRoute.type)) {
+                return false;
+            }
+
+            if (rules.allowedDirections &&
+                !rules.allowedDirections.includes(selectedRoute.direction)) {
+                return false;
+            }
+
+            return true;
+        });
+    }, [buses]);
+
+    const getBusById = useCallback((id) => {
         return buses.find(bus => bus.id === parseInt(id));
-    };
+    }, [buses]);
 
-    const getBookedSeats = (busId) => {
-        // Return all seat numbers that are booked for this specific bus on this date
-        // For simplicity in this demo, we're ignoring date validation for booked seats
-        // to ensure some seats always look booked
-        return bookings
-            .filter(booking => booking.busId === parseInt(busId))
-            .flatMap(booking => booking.seatNumbers);
-    };
+    const getBookedSeats = useCallback((busId, date = null) => {
+        const filteredBookings = bookings.filter(
+            booking => booking.busId === parseInt(busId)
+        );
 
-    const addBooking = (bookingDetails) => {
+        if (date) {
+            // Filter by date if provided
+            return filteredBookings
+                .filter(booking => booking.date === date)
+                .flatMap(booking => booking.seatNumbers);
+        }
+
+        // For demo, return seats from all bookings for this bus
+        return filteredBookings.flatMap(booking => booking.seatNumbers);
+    }, [bookings]);
+
+    const addBooking = useCallback((bookingDetails) => {
         const newBooking = {
-            id: `BK-${Date.now()}`,
-            ...bookingDetails,
-            status: 'Confirmed'
+            id: `BK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            createdAt: new Date().toISOString(),
+            status: 'Confirmed',
+            ...bookingDetails
         };
-        setBookings(prev => [...prev, newBooking]);
+
+        setBookings(prev => [newBooking, ...prev]);
         return newBooking;
-    };
+    }, []);
 
-    const deleteBooking = (id) => {
+    const deleteBooking = useCallback((id) => {
         setBookings(prev => prev.filter(booking => booking.id !== id));
-    };
+    }, []);
 
-    const addBus = (newBus) => {
-        setBuses(prev => [...prev, { ...newBus, id: Date.now() }]);
-    };
+    const addBus = useCallback((newBus) => {
+        setBuses(prev => [...prev, {
+            id: Date.now(),
+            createdAt: new Date().toISOString(),
+            ...newBus
+        }]);
+    }, []);
 
-    const updateBus = (updatedBus) => {
-        setBuses(prev => prev.map(bus => bus.id === updatedBus.id ? updatedBus : bus));
-    };
+    const updateBus = useCallback((updatedBus) => {
+        setBuses(prev => prev.map(
+            bus => bus.id === updatedBus.id ? updatedBus : bus
+        ));
+    }, []);
 
-    const deleteBus = (id) => {
+    const deleteBus = useCallback((id) => {
         setBuses(prev => prev.filter(bus => bus.id !== id));
-    };
+    }, []);
 
+    const value = {
+        buses,
+        routes,
+        bookings,
+        searchParams,
+        searchBuses,
+        getBusById,
+        getBookedSeats,
+        addBooking,
+        deleteBooking,
+        addBus,
+        updateBus,
+        deleteBus
+    };
 
     return (
-        <BookingContext.Provider value={{
-            buses,
-            routes,
-            bookings,
-            searchParams,
-            searchBuses,
-            getBusById,
-            getBookedSeats,
-            addBooking,
-            deleteBooking,
-            addBus,
-            updateBus,
-            deleteBus
-        }}>
+        <BookingContext.Provider value={value}>
             {children}
         </BookingContext.Provider>
     );

@@ -1,17 +1,20 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import AdminHeader from './AdminHeader';
+import Sidebar from './Sidebar';
+import TopBar from './TopBar';
 
 const AdminLayout = () => {
     return (
-        <div className="flex flex-col min-h-screen font-sans text-gray-900 bg-gray-50">
-            <AdminHeader />
-            <main className="container mx-auto px-4 py-6 flex-grow">
-                <Outlet />
+        <div className="min-h-screen bg-gray-50 font-sans">
+            <Sidebar />
+            <TopBar />
+
+            {/* Main Content Area */}
+            <main className="pl-64 pt-16 min-h-screen">
+                <div className="p-8">
+                    <Outlet />
+                </div>
             </main>
-            <div className="bg-white border-t py-4 text-center text-gray-500 text-sm">
-                &copy; {new Date().getFullYear()} SajiloSafar Admin Panel
-            </div>
         </div>
     );
 };

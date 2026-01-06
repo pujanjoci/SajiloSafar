@@ -17,8 +17,8 @@ const AdminHeader = () => {
             <div className="container mx-auto px-4 py-3 flex justify-between items-center">
                 <div className="flex items-center gap-8">
                     <Link to="/admin/dashboard" className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                        <div className="bg-blue-600 text-white p-1 rounded">Admin</div>
-                        Panel
+                        <div className="bg-blue-600 text-white p-1 rounded">Sajilo</div>
+                        Safar
                     </Link>
 
                     <nav className="hidden md:flex items-center gap-6">

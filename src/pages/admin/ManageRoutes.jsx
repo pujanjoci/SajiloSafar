@@ -1,51 +1,74 @@
+
 import React from 'react';
 import { useBooking } from '../../context/BookingContext';
-import { MapPin } from 'lucide-react';
+import AdminTable from '../../components/admin/ui/AdminTable';
+import StatusBadge from '../../components/admin/ui/StatusBadge';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 const ManageRoutes = () => {
     const { routes } = useBooking();
 
+    const columns = [
+        {
+            header: 'Origin',
+            accessor: 'from',
+            render: (route) => <span className="font-medium text-gray-900">{route.from}</span>
+        },
+        {
+            header: 'Destination',
+            accessor: 'to',
+            render: (route) => <span className="font-medium text-gray-900">{route.to}</span>
+        },
+        {
+            header: 'Type',
+            accessor: 'type',
+            render: (route) => <span className="capitalize">{route.type || 'Standard'}</span>
+        },
+        {
+            header: 'Direction',
+            accessor: 'direction'
+        },
+        {
+            header: 'Status',
+            accessor: 'isPopular',
+            render: (route) => <StatusBadge status={route.isPopular ? 'Popular' : 'Standard'} type={route.isPopular ? 'success' : 'default'} />
+        },
+        {
+            header: 'Actions',
+            render: (route) => (
+                <div className="flex gap-2">
+                    <button className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors">
+                        <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+            )
+        }
+    ];
+
     return (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-            <div className="p-6 border-b border-gray-100">
-                <h3 className="text-xl font-bold text-gray-800">Available Routes</h3>
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Route Management</h1>
+                    <p className="text-gray-500 text-sm mt-1">Manage network connections and route details.</p>
+                </div>
+                <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium">
+                    <Plus className="w-4 h-4" />
+                    Add New Route
+                </button>
             </div>
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Route ID</th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Origin</th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Destination</th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {routes.map(route => (
-                            <tr key={route.id} className="hover:bg-gray-50 transition">
-                                <td className="px-6 py-4 text-sm text-gray-600 font-mono">#{route.id}</td>
-                                <td className="px-6 py-4 text-gray-800 font-medium">
-                                    <div className='flex items-center gap-2'>
-                                        <MapPin size={16} className="text-red-500" />
-                                        {route.from}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-gray-800 font-medium">
-                                    <div className='flex items-center gap-2'>
-                                        <MapPin size={16} className="text-green-500" />
-                                        {route.to}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold uppercase">Active</span>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+
+            <AdminTable
+                columns={columns}
+                data={routes}
+                searchPlaceholder="Search routes by city..."
+            />
         </div>
     );
 };
 
 export default ManageRoutes;
+

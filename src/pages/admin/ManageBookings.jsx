@@ -1,44 +1,76 @@
 import React from 'react';
 import { useBooking } from '../../context/BookingContext';
+import AdminTable from '../../components/admin/ui/AdminTable';
+import StatusBadge from '../../components/admin/ui/StatusBadge';
+import { Eye, Edit2 } from 'lucide-react';
 
 const ManageBookings = () => {
-    const { bookings } = useBooking();
+    const { bookings, deleteBooking } = useBooking();
+
+    const columns = [
+        {
+            header: 'Booking ID',
+            accessor: 'id',
+            render: (booking) => <span className="font-mono text-xs text-gray-500">#{booking.id?.slice(0, 8)}</span>
+        },
+        {
+            header: 'Customer',
+            accessor: 'passengerName',
+            render: (booking) => (
+                <div>
+                    <div className="font-medium text-gray-900">{booking.passengerName}</div>
+                    <div className="text-xs text-gray-500">{booking.phoneNumber}</div>
+                </div>
+            )
+        },
+        {
+            header: 'Bus Details',
+            accessor: 'busName',
+            render: (booking) => (
+                <div>
+                    <div className="text-gray-900">{booking.busName}</div>
+                    <div className="text-xs text-gray-500">{booking.selectedSeats?.length} Seats • {booking.selectedSeats?.join(', ')}</div>
+                </div>
+            )
+        },
+        { header: 'Travel Date', accessor: 'date' },
+        {
+            header: 'Amount',
+            accessor: 'totalPrice',
+            render: (booking) => <span className="font-semibold text-gray-900">NPR {booking.totalPrice}</span>
+        },
+        {
+            header: 'Status',
+            accessor: 'status',
+            render: (booking) => <StatusBadge status={booking.status || 'Confirmed'} />
+        },
+        {
+            header: 'Actions',
+            render: (booking) => (
+                <div className="flex gap-2">
+                    <button className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="View Details">
+                        <Eye className="w-4 h-4" />
+                    </button>
+                </div>
+            )
+        }
+    ];
 
     return (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-            <div className="p-6 border-b border-gray-100">
-                <h3 className="text-xl font-bold text-gray-800">Recent Bookings</h3>
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Bookings</h1>
+                    <p className="text-gray-500 text-sm mt-1">Track and manage customer reservations.</p>
+                </div>
+                {/* Export or Filter Actions could go here */}
             </div>
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ID</th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">User</th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Bus ID</th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Seats</th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Date</th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {bookings.map(booking => (
-                            <tr key={booking.id} className="hover:bg-gray-50 transition">
-                                <td className="px-6 py-4 text-sm text-gray-600 font-mono">{booking.id}</td>
-                                <td className="px-6 py-4 text-gray-800 font-medium">{booking.passengerName || 'User'} <br /><span className='text-xs text-gray-400 font-normal'>{booking.contactNumber}</span></td>
-                                <td className="px-6 py-4 text-gray-600">#{booking.busId}</td>
-                                <td className="px-6 py-4 text-gray-600">{booking.seatNumbers.join(', ')}</td>
-                                <td className="px-6 py-4 text-gray-600">{booking.date}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-semibold uppercase ${booking.status === 'Confirmed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                                        {booking.status}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+
+            <AdminTable
+                columns={columns}
+                data={bookings}
+                searchPlaceholder="Search by name, ID..."
+            />
         </div>
     );
 };

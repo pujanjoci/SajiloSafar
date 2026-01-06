@@ -1,23 +1,50 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { Lock, User } from 'lucide-react';
 
 const AdminLogin = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
     const { login } = useAuth();
+    const { error: showError, success, info } = useToast();
     const navigate = useNavigate();
+    const location = useLocation();
 
-    const handleSubmit = (e) => {
+    // Check for redirect on mount - show toast only if redirected
+    useEffect(() => {
+        const loginRequired = sessionStorage.getItem('loginRequired');
+        const fromProtectedRoute = location.state?.fromProtectedRoute;
+
+        if (loginRequired || fromProtectedRoute) {
+            info('Please login to continue');
+
+            // Clear flags immediately
+            sessionStorage.removeItem('loginRequired');
+
+            if (fromProtectedRoute) {
+                window.history.replaceState({}, document.title);
+            }
+        }
+    }, []); // Run only once on mount
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        setError('');
-        const result = login(username, password);
+
+        const result = await login(username, password, true); // true for admin login
+
         if (result.success) {
-            navigate('/admin/dashboard');
+            success('Login successful!');
+
+            // Check if there was an intended path
+            const intendedPath = location.state?.intendedPath || '/admin/dashboard';
+
+            setTimeout(() => {
+                navigate(intendedPath);
+            }, 500);
         } else {
-            setError(result.message);
+            showError(result.message || 'Invalid credentials');
         }
     };
 
@@ -28,12 +55,6 @@ const AdminLogin = () => {
                     <h2 className="text-3xl font-bold text-gray-800">Admin Login</h2>
                     <p className="text-gray-500 mt-2">Sign in to manage the system</p>
                 </div>
-
-                {error && (
-                    <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6 text-sm text-center">
-                        {error}
-                    </div>
-                )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
