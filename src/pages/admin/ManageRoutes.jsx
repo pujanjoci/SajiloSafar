@@ -1,12 +1,32 @@
 
-import React from 'react';
-import { useBooking } from '../../context/BookingContext';
+import React, { useState, useEffect } from 'react';
+// import { useBooking } from '../../context/BookingContext';
 import AdminTable from '../../components/admin/ui/AdminTable';
 import StatusBadge from '../../components/admin/ui/StatusBadge';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 const ManageRoutes = () => {
-    const { routes } = useBooking();
+    const [routes, setRoutes] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        fetchRoutes();
+    }, []);
+
+    const fetchRoutes = async () => {
+        try {
+            const response = await fetch('http://localhost/sajilo-safar/api/routes.php');
+            if (!response.ok) throw new Error('Failed to fetch routes');
+            const data = await response.json();
+            setRoutes(data);
+        } catch (error) {
+            console.error('Error fetching routes:', error);
+            setError('Failed to load routes');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const columns = [
         {
@@ -61,11 +81,17 @@ const ManageRoutes = () => {
                 </button>
             </div>
 
-            <AdminTable
-                columns={columns}
-                data={routes}
-                searchPlaceholder="Search routes by city..."
-            />
+            {loading ? (
+                <div className="p-8 text-center text-gray-500">Loading routes...</div>
+            ) : error ? (
+                <div className="p-8 text-center text-red-500">{error}</div>
+            ) : (
+                <AdminTable
+                    columns={columns}
+                    data={routes}
+                    searchPlaceholder="Search routes by city..."
+                />
+            )}
         </div>
     );
 };

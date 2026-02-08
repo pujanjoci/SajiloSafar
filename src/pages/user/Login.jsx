@@ -373,15 +373,6 @@ const Login = () => {
                             </button>
                         </p>
                     </div>
-
-                    {!isLoginMode && (
-                        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                            <p className="text-sm text-blue-800 text-center">
-                                <strong>Note for Development:</strong> User data is stored in localStorage.
-                                For production, this should be replaced with a secure backend API.
-                            </p>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>

@@ -1,184 +1,157 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { adminUsers } from '../data/adminUsers';
+
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+const API_BASE_URL = 'http://localhost/sajilo-safar/api';
+
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(() => {
-        const storedUser = localStorage.getItem('user');
-        return storedUser ? JSON.parse(storedUser) : null;
-    });
+    const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Check session on mount and when user state changes
     useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
-        setLoading(false);
+        // Always check on mount
+        checkSession();
     }, []);
 
-    // Function to get all registered users from localStorage
-    const getRegisteredUsers = () => {
-        const users = localStorage.getItem('registeredUsers');
-        return users ? JSON.parse(users) : [];
-    };
-
-    // Function to save registered users to localStorage
-    const saveRegisteredUsers = (users) => {
-        localStorage.setItem('registeredUsers', JSON.stringify(users));
-    };
-
-    // Admin login (hardcoded credentials)
-    const adminLogin = (username, password) => {
-        const admin = adminUsers.find(u => u.username === username && u.password === password);
-        if (admin) {
-            const { password: _, ...userWithoutPassword } = admin;
-            const userData = { ...userWithoutPassword, role: 'admin', isAdmin: true };
-            setUser(userData);
-            localStorage.setItem('user', JSON.stringify(userData));
-            return { success: true, user: userData };
+    useEffect(() => {
+        // Only set up periodic check if user is logged in
+        if (user) {
+            const interval = setInterval(checkSession, 60000);
+            return () => clearInterval(interval);
         }
-        return { success: false, message: 'Invalid admin credentials' };
+    }, [user]);
+
+    const checkSession = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/session.php`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include' // Important for sending cookies
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.authenticated) {
+                const userData = {
+                    ...data.user,
+                    isAdmin: data.user.role === 'admin' || data.user.isAdmin
+                };
+                setUser(userData);
+            } else {
+                // Session expired or invalid
+                if (user) {
+                    // Only clear if we thought we were logged in
+                    setUser(null);
+                    localStorage.removeItem('user'); // Clean up legacy
+                }
+            }
+            setLoading(false);
+        } catch (error) {
+            console.error('Session check error:', error);
+            setLoading(false);
+        }
     };
 
-    // Regular user login (checks against localStorage)
-    const userLogin = (email, password) => {
+    // Login function (handles both user and admin based on response)
+    const login = async (email, password) => {
         try {
-            const registeredUsers = getRegisteredUsers();
-            const user = registeredUsers.find(u => u.email === email && u.password === password);
+            const response = await fetch(`${API_BASE_URL}/login.php`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, password }),
+                credentials: 'include' // Important for receiving cookies
+            });
 
-            if (user) {
+            const data = await response.json();
+
+            if (response.ok) {
                 const userData = {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    phone: user.phone,
-                    role: 'user',
-                    isAdmin: false,
-                    token: `local_${Date.now()}` // Generate a local token
+                    ...data.user,
+                    isAdmin: data.user.role === 'admin' || data.user.isAdmin
                 };
-
+                
                 setUser(userData);
-                localStorage.setItem('user', JSON.stringify(userData));
-                localStorage.setItem('authToken', userData.token);
-
-                return {
-                    success: true,
-                    user: userData,
-                    message: 'Login successful'
-                };
+                return { success: true, user: userData, message: 'Login successful' };
             } else {
-                // Check if email exists but password is wrong
-                const emailExists = registeredUsers.some(u => u.email === email);
-                if (emailExists) {
-                    return { success: false, message: 'Incorrect password' };
-                }
-                return { success: false, message: 'No account found with this email' };
+                return { success: false, message: data.message || 'Login failed' };
             }
         } catch (error) {
-            return { success: false, message: 'Login failed. Please try again.' };
+            console.error('Login error:', error);
+            return { success: false, message: 'Network error. Please try again.' };
         }
     };
 
-    // Combined login function
-    const login = async (identifier, password, isAdminLogin = false) => {
-        if (isAdminLogin) {
-            return adminLogin(identifier, password);
-        } else {
-            return userLogin(identifier, password);
+    // Admin login specific wrapper
+    const adminLogin = async (username, password) => {
+        const result = await login(username, password);
+        if (result.success) {
+            if (result.user.isAdmin || result.user.role === 'admin') {
+                return result;
+            } else {
+                logout(); // Log out if not admin
+                return { success: false, message: 'Access denied. Admin privileges required.' };
+            }
         }
+        return result;
     };
 
-    // User registration (stores in localStorage)
+    // User registration
     const register = async (userData) => {
         try {
-            const registeredUsers = getRegisteredUsers();
+            const response = await fetch(`${API_BASE_URL}/register.php`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(userData),
+                credentials: 'include'
+            });
 
-            // Check if email already exists
-            const emailExists = registeredUsers.some(u => u.email === userData.email);
-            if (emailExists) {
-                return { success: false, message: 'Email already registered' };
+            const data = await response.json();
+
+            if (response.ok) {
+                return { success: true, message: data.message || 'Registration successful! Please login.' };
+            } else {
+                return { success: false, message: data.message || 'Registration failed' };
             }
-
-            // Create new user
-            const newUser = {
-                id: 'user_' + Date.now(),
-                email: userData.email,
-                name: userData.name,
-                phone: userData.phone,
-                password: userData.password, // Note: In production, never store plain passwords
-                createdAt: new Date().toISOString()
-            };
-
-            // Save to registered users
-            saveRegisteredUsers([...registeredUsers, newUser]);
-
-            // Return success WITHOUT auto-login
-            return {
-                success: true,
-                message: 'Registration successful! Please login to continue.'
-            };
-
         } catch (error) {
-            return { success: false, message: 'Registration failed. Please try again.' };
+            console.error('Registration error:', error);
+            return { success: false, message: 'Network error. Please try again.' };
         }
     };
 
-    // Update user profile
     const updateProfile = async (updatedData) => {
-        try {
-            if (!user) {
-                return { success: false, message: 'No user logged in' };
-            }
-
-            const registeredUsers = getRegisteredUsers();
-            const userIndex = registeredUsers.findIndex(u => u.id === user.id);
-
-            if (userIndex === -1) {
-                return { success: false, message: 'User not found' };
-            }
-
-            // Update user data
-            registeredUsers[userIndex] = {
-                ...registeredUsers[userIndex],
-                ...updatedData,
-                // Don't update password unless provided
-                password: updatedData.password || registeredUsers[userIndex].password
-            };
-
-            saveRegisteredUsers(registeredUsers);
-
-            // Update current user session
-            const updatedUser = { ...user, ...updatedData };
-            if (updatedData.password) {
-                // If password was updated, also update it in the session user object
-                updatedUser.password = updatedData.password;
-            }
-
-            setUser(updatedUser);
-            localStorage.setItem('user', JSON.stringify(updatedUser));
-
-            return {
-                success: true,
-                user: updatedUser,
-                message: 'Profile updated successfully'
-            };
-
-        } catch (error) {
-            return { success: false, message: 'Update failed. Please try again.' };
-        }
+        // ... (Update profile logic needs API endpoint, for now keep as is or stub)
+        // Since we are moving to backend, this should likely call an API too.
+        // For this step, I will leave it but warn it might not persist to DB without an endpoint.
+        // TODO: Create update_profile.php if needed.
+        return { success: false, message: "Profile update not implemented in API yet." };
     };
 
-    const logout = () => {
+    const logout = async () => {
+        try {
+             await fetch(`${API_BASE_URL}/logout.php`, {
+                method: 'POST',
+                credentials: 'include'
+            });
+        } catch (error) {
+            console.error("Logout error", error);
+        }
         setUser(null);
         localStorage.removeItem('user');
         localStorage.removeItem('authToken');
         sessionStorage.removeItem('pendingSearch');
     };
+
 
     const isAdmin = () => {
         return user?.role === 'admin' || user?.isAdmin === true;
@@ -200,6 +173,7 @@ export const AuthProvider = ({ children }) => {
         <AuthContext.Provider value={{
             user,
             login,
+            adminLogin,
             logout,
             register,
             updateProfile,

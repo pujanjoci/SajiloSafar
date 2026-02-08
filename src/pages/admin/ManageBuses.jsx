@@ -1,17 +1,38 @@
-import React, { useState } from 'react';
-import { useBooking } from '../../context/BookingContext';
+import React, { useState, useEffect } from 'react';
+// import { useBooking } from '../../context/BookingContext';
 import AdminTable from '../../components/admin/ui/AdminTable';
 import StatusBadge from '../../components/admin/ui/StatusBadge';
 import { Plus, Edit2, Trash2, Eye } from 'lucide-react';
 
 const ManageBuses = () => {
-    const { buses, deleteBus } = useBooking();
-    // In a real app, this modal state would be handled by a detailed form logic
+    const [buses, setBuses] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const handleDelete = (id) => {
+    useEffect(() => {
+        fetchBuses();
+    }, []);
+
+    const fetchBuses = async () => {
+        try {
+            const response = await fetch('http://localhost/sajilo-safar/api/buses.php');
+            if (!response.ok) throw new Error('Failed to fetch buses');
+            const data = await response.json();
+            setBuses(data);
+        } catch (error) {
+            console.error('Error fetching buses:', error);
+            setError('Failed to load buses');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
         if (window.confirm('Are you sure you want to delete this bus?')) {
-            deleteBus(id);
+            // TODO: Implement delete API endpoint
+            console.log('Delete bus', id);
+            // setBuses(buses.filter(bus => bus.id !== id));
         }
     };
 
@@ -82,11 +103,17 @@ const ManageBuses = () => {
                 </button>
             </div>
 
-            <AdminTable
-                data={buses}
-                columns={columns}
-                searchPlaceholder="Search buses..."
-            />
+            {loading ? (
+                <div className="p-8 text-center text-gray-500">Loading buses...</div>
+            ) : error ? (
+                <div className="p-8 text-center text-red-500">{error}</div>
+            ) : (
+                <AdminTable
+                    data={buses}
+                    columns={columns}
+                    searchPlaceholder="Search buses..."
+                />
+            )}
         </div>
     );
 };

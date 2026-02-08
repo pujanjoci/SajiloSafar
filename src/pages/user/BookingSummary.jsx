@@ -1,24 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useBooking } from '../../context/BookingContext';
+import { useAuth } from '../../context/AuthContext';
 import {
     CheckCircle,
-    CreditCard,
-    Smartphone,
-    Wallet,
     Shield,
     Lock,
     ArrowLeft,
     User,
     Calendar,
     Clock,
-    MapPin
+    MapPin,
+    CreditCard
 } from 'lucide-react';
 
 const BookingSummary = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { addBooking } = useBooking();
+    const { user, isAuthenticated } = useAuth();
     const { bus, selectedSeats, seatPrices = [], date = new Date().toISOString().split('T')[0] } = location.state || {};
 
     const [passengerDetails, setPassengerDetails] = useState({
@@ -27,10 +27,10 @@ const BookingSummary = () => {
         phone: '',
         emergencyContact: ''
     });
-    const [paymentMethod, setPaymentMethod] = useState('esewa');
     const [isProcessing, setIsProcessing] = useState(false);
     const [bookingComplete, setBookingComplete] = useState(false);
     const [bookingId, setBookingId] = useState('');
+    const [khaltiLoaded, setKhaltiLoaded] = useState(false);
 
     useEffect(() => {
         if (!bus || !selectedSeats) {
@@ -38,23 +38,46 @@ const BookingSummary = () => {
         }
     }, [bus, selectedSeats, navigate]);
 
+    // Auto-fill user details if logged in
+    useEffect(() => {
+        if (isAuthenticated && user) {
+            setPassengerDetails(prev => ({
+                ...prev,
+                name: user.name || '',
+                email: user.email || '',
+                phone: user.phone || ''
+            }));
+        }
+    }, [isAuthenticated, user]);
+
+    // Load Khalti Script
+    useEffect(() => {
+        const script = document.createElement("script");
+        script.src = "https://khalti.com/static/khalti-checkout.js";
+        script.async = true;
+        
+        script.onload = () => {
+            console.log("Khalti script loaded successfully");
+            setKhaltiLoaded(true);
+        };
+
+        script.onerror = () => {
+             console.error("Failed to load Khalti script");
+             alert("Failed to load payment system. Please check your internet connection.");
+        };
+
+        document.body.appendChild(script);
+
+        return () => {
+            document.body.removeChild(script);
+        };
+    }, []);
+
     if (!bus || !selectedSeats) {
-        return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-4">Invalid Booking Request</h2>
-                    <button
-                        onClick={() => navigate('/')}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                    >
-                        Return to Home
-                    </button>
-                </div>
-            </div>
-        );
+        return null; // Or loading spinner, handled by useEffect redirect
     }
 
-    // Calculate prices based on seat types if available, otherwise use base price
+    // Calculate prices ...
     const calculatePrices = () => {
         if (seatPrices.length > 0) {
             const baseTotal = seatPrices.reduce((sum, seat) => sum + seat.price, 0);
@@ -95,9 +118,7 @@ const BookingSummary = () => {
         }));
     };
 
-    const handlePayment = async (e) => {
-        e.preventDefault();
-
+    const handlePayment = async () => {
         // Validate inputs
         if (!passengerDetails.name || !passengerDetails.email || !passengerDetails.phone) {
             alert("Please fill in all required passenger details");
@@ -109,36 +130,77 @@ const BookingSummary = () => {
             return;
         }
 
+        // Khalti Config
+        const config = {
+            // Test Public Key
+            "publicKey": "test_public_key_dc74e6f3e4e44385a81ca8c91d848135",
+            "productIdentity": bus.id || "1234567890",
+            "productName": "Bus Ticket",
+            "productUrl": "http://localhost:5173",
+            "paymentPreference": [
+                "KHALTI",
+                "EBANKING",
+                "MOBILE_BANKING",
+                "CONNECT_IPS",
+                "SCT",
+            ],
+            "eventHandler": {
+                onSuccess(payload) {
+                    // console.log(payload);
+                    processBookingSuccess(payload);
+                },
+                onError(error) {
+                    console.log(error);
+                    alert("Payment Failed. Please try again.");
+                    setIsProcessing(false);
+                },
+                onClose() {
+                    console.log('widget is closing');
+                    setIsProcessing(false);
+                }
+            }
+        };
+
         setIsProcessing(true);
+        
+        // Initialize Khalti
+        try {
+            const checkout = new window.KhaltiCheckout(config);
+            checkout.show({ amount: prices.grandTotal * 100 }); // Amount in paisa
+        } catch (error) {
+            console.error("Khalti script not loaded", error);
+            alert("Payment system loading. Please try again in a moment.");
+            setIsProcessing(false);
+        }
+    };
 
-        // Simulate payment processing
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Generate booking ID
-        const newBookingId = `BK${Date.now().toString().slice(-8)}`;
-        setBookingId(newBookingId);
-
-        // Add booking to context
-        addBooking({
-            busId: bus.id,
-            userId: Math.floor(Math.random() * 1000) + 1,
-            seatNumbers: selectedSeats,
-            seatDetails: seatPrices,
-            totalAmount: prices.grandTotal,
-            date: date,
-            passengerName: passengerDetails.name,
-            contactNumber: passengerDetails.phone,
-            email: passengerDetails.email,
-            emergencyContact: passengerDetails.emergencyContact,
-            bookingId: newBookingId,
-            paymentMethod: paymentMethod,
-            busName: bus.name,
-            busNumber: bus.busNumber,
-            departureTime: bus.departureTime || '07:00 AM'
-        });
-
-        setIsProcessing(false);
-        setBookingComplete(true);
+    const processBookingSuccess = async (paymentPayload) => {
+         // Generate booking ID
+         const newBookingId = `BK${Date.now().toString().slice(-8)}`;
+         setBookingId(newBookingId);
+ 
+         // Add booking to context
+         await addBooking({
+             busId: bus.id,
+             userId: user ? user.id : Math.floor(Math.random() * 1000) + 1,
+             seatNumbers: selectedSeats,
+             seatDetails: seatPrices,
+             totalAmount: prices.grandTotal,
+             date: date,
+             passengerName: passengerDetails.name,
+             contactNumber: passengerDetails.phone,
+             email: passengerDetails.email,
+             emergencyContact: passengerDetails.emergencyContact,
+             bookingId: newBookingId,
+             paymentMethod: 'Khalti',
+             paymentToken: paymentPayload.token, // Store token
+             busName: bus.name,
+             busNumber: bus.busNumber,
+             departureTime: bus.departureTime || '07:00 AM'
+         });
+ 
+         setIsProcessing(false);
+         setBookingComplete(true);
     };
 
     const handleBack = () => {
@@ -187,7 +249,7 @@ const BookingSummary = () => {
                                             <p className="text-lg font-semibold text-gray-800 mb-2">Payment Summary</p>
                                             <div className="flex justify-center items-baseline gap-2">
                                                 <span className="text-3xl font-bold text-gray-900">NPR {prices.grandTotal}</span>
-                                                <span className="text-gray-500">paid via {paymentMethod}</span>
+                                                <span className="text-gray-500">paid via Khalti</span>
                                             </div>
                                         </div>
                                     </div>
@@ -241,120 +303,119 @@ const BookingSummary = () => {
                             </div>
                         ) : (
                             <>
-                                {/* Passenger Details */}
-                                <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 mb-6">
-                                    <div className="flex items-center gap-3 mb-6">
-                                        <User className="w-6 h-6 text-blue-500" />
-                                        <h2 className="text-xl font-bold text-gray-900">Passenger Information</h2>
-                                    </div>
-
-                                    <form onSubmit={handlePayment}>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Full Name <span className="text-red-500">*</span>
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    name="name"
-                                                    required
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                                                    value={passengerDetails.name}
-                                                    onChange={handleInputChange}
-                                                    placeholder="John Doe"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Email Address <span className="text-red-500">*</span>
-                                                </label>
-                                                <input
-                                                    type="email"
-                                                    name="email"
-                                                    required
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                                                    value={passengerDetails.email}
-                                                    onChange={handleInputChange}
-                                                    placeholder="john@example.com"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Phone Number <span className="text-red-500">*</span>
-                                                </label>
-                                                <input
-                                                    type="tel"
-                                                    name="phone"
-                                                    required
-                                                    pattern="[0-9]{10}"
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                                                    value={passengerDetails.phone}
-                                                    onChange={handleInputChange}
-                                                    placeholder="98XXXXXXXX"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Emergency Contact
-                                                </label>
-                                                <input
-                                                    type="tel"
-                                                    name="emergencyContact"
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                                                    value={passengerDetails.emergencyContact}
-                                                    onChange={handleInputChange}
-                                                    placeholder="Optional"
-                                                />
-                                            </div>
+                                {/* Passenger Details - Only show form if NOT authenticated or if editing is needed (optional) */}
+                                {/* For now, we show read-only or pre-filled form if auth, and editable if guest. */}
+                                {/* Requirement: "there is still the user details after the user has already logged in" -> Hide it or make it look like a summary. */}
+                                
+                                {isAuthenticated ? (
+                                    <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 mb-6">
+                                         <div className="flex items-center gap-3 mb-6">
+                                            <User className="w-6 h-6 text-blue-500" />
+                                            <h2 className="text-xl font-bold text-gray-900">Passenger Information</h2>
                                         </div>
-                                    </form>
-                                </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-blue-50 p-4 rounded-xl">
+                                             <div>
+                                                <p className="text-sm text-gray-500">Name</p>
+                                                <p className="font-semibold text-gray-900">{passengerDetails.name}</p>
+                                             </div>
+                                             <div>
+                                                <p className="text-sm text-gray-500">Email</p>
+                                                <p className="font-semibold text-gray-900">{passengerDetails.email}</p>
+                                             </div>
+                                             <div>
+                                                <p className="text-sm text-gray-500">Phone</p>
+                                                <p className="font-semibold text-gray-900">{passengerDetails.phone}</p>
+                                             </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 mb-6">
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <User className="w-6 h-6 text-blue-500" />
+                                            <h2 className="text-xl font-bold text-gray-900">Passenger Information</h2>
+                                        </div>
 
-                                {/* Payment Methods */}
+                                        <form>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        Full Name <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        name="name"
+                                                        required
+                                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                                        value={passengerDetails.name}
+                                                        onChange={handleInputChange}
+                                                        placeholder="John Doe"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        Email Address <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="email"
+                                                        name="email"
+                                                        required
+                                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                                        value={passengerDetails.email}
+                                                        onChange={handleInputChange}
+                                                        placeholder="john@example.com"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        Phone Number <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="tel"
+                                                        name="phone"
+                                                        required
+                                                        pattern="[0-9]{10}"
+                                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                                        value={passengerDetails.phone}
+                                                        onChange={handleInputChange}
+                                                        placeholder="98XXXXXXXX"
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        Emergency Contact
+                                                    </label>
+                                                    <input
+                                                        type="tel"
+                                                        name="emergencyContact"
+                                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                                                        value={passengerDetails.emergencyContact}
+                                                        onChange={handleInputChange}
+                                                        placeholder="Optional"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                )}
+
+                                {/* Payment Methods - Only Khalti */}
                                 <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
                                     <div className="flex items-center gap-3 mb-6">
                                         <CreditCard className="w-6 h-6 text-blue-500" />
-                                        <h2 className="text-xl font-bold text-gray-900">Select Payment Method</h2>
+                                        <h2 className="text-xl font-bold text-gray-900">Payment Method</h2>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <PaymentOption
-                                            id="esewa"
-                                            icon="💰"
-                                            title="eSewa"
-                                            description="Pay with eSewa wallet"
-                                            isSelected={paymentMethod === 'esewa'}
-                                            onSelect={() => setPaymentMethod('esewa')}
-                                        />
-
+                                    <div className="grid grid-cols-1 gap-4">
                                         <PaymentOption
                                             id="khalti"
-                                            icon="💳"
+                                            icon={<img src="/khalti.png" alt="Khalti" className="w-8 h-8 object-contain" />}
                                             title="Khalti"
-                                            description="Pay with Khalti wallet"
-                                            isSelected={paymentMethod === 'khalti'}
-                                            onSelect={() => setPaymentMethod('khalti')}
-                                        />
-
-                                        <PaymentOption
-                                            id="card"
-                                            icon={<CreditCard className="w-5 h-5" />}
-                                            title="Credit/Debit Card"
-                                            description="Visa, Mastercard, UnionPay"
-                                            isSelected={paymentMethod === 'card'}
-                                            onSelect={() => setPaymentMethod('card')}
-                                        />
-
-                                        <PaymentOption
-                                            id="bank"
-                                            icon={<Wallet className="w-5 h-5" />}
-                                            title="Bank Transfer"
-                                            description="Direct bank transfer"
-                                            isSelected={paymentMethod === 'bank'}
-                                            onSelect={() => setPaymentMethod('bank')}
+                                            description="Pay securely with Khalti Digital Wallet"
+                                            isSelected={true}
+                                            onSelect={() => {}}
                                         />
                                     </div>
 
@@ -365,8 +426,7 @@ const BookingSummary = () => {
                                             <div>
                                                 <p className="font-semibold text-green-800">Secure Payment</p>
                                                 <p className="text-sm text-green-700 mt-1">
-                                                    Your payment information is encrypted and secured with 256-bit SSL encryption.
-                                                    We never store your card details.
+                                                    Your payment information is encrypted and secured.
                                                 </p>
                                             </div>
                                         </div>
@@ -463,25 +523,28 @@ const BookingSummary = () => {
                                 <div className="mt-8">
                                     <button
                                         onClick={handlePayment}
-                                        disabled={isProcessing}
+                                        disabled={isProcessing || !khaltiLoaded}
+                                        style={{ backgroundColor: khaltiLoaded ? '#5C2D91' : '#9ca3af' }} // Khalti Color or Gray
                                         className={`
                       w-full py-4 rounded-xl font-semibold text-white transition-all duration-200
-                      flex items-center justify-center gap-2
-                      ${isProcessing
-                                                ? 'bg-gray-400 cursor-not-allowed'
-                                                : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-700 hover:to-emerald-600 hover:shadow-lg'
-                                            }
+                      flex items-center justify-center gap-2 hover:shadow-lg
+                      ${(isProcessing || !khaltiLoaded) ? 'opacity-70 cursor-not-allowed' : ''}
                     `}
                                     >
                                         {isProcessing ? (
                                             <>
                                                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                Processing Payment...
+                                                Processing...
+                                            </>
+                                        ) : !khaltiLoaded ? (
+                                            <>
+                                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                Loading Payment System...
                                             </>
                                         ) : (
                                             <>
-                                                <Lock className="w-5 h-5" />
-                                                Pay NPR {prices.grandTotal}
+                                                <CreditCard className="w-5 h-5" />
+                                                Pay with Khalti (NPR {prices.grandTotal})
                                             </>
                                         )}
                                     </button>
@@ -505,7 +568,7 @@ const PaymentOption = ({ id, icon, title, description, isSelected, onSelect }) =
         <label className={`
       border-2 rounded-xl p-4 cursor-pointer transition-all duration-200
       ${isSelected
-                ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
+                ? 'border-purple-500 bg-purple-50 ring-1 ring-purple-500'
                 : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
             }
     `}>
@@ -518,7 +581,7 @@ const PaymentOption = ({ id, icon, title, description, isSelected, onSelect }) =
                 className="sr-only"
             />
             <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isSelected ? 'bg-blue-100' : 'bg-gray-100'
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isSelected ? 'bg-white' : 'bg-gray-100'
                     }`}>
                     {typeof icon === 'string' ? (
                         <span className="text-lg">{icon}</span>

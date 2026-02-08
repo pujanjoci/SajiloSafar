@@ -1,9 +1,11 @@
-import React, { createContext, useState, useContext, useCallback } from 'react';
-import { buses as initialBuses } from '../data/buses';
+import React, { createContext, useState, useContext, useCallback, useEffect } from 'react';
+import { buses as initialBuses, calculateRoutePrice } from '../data/buses'; // Keeping imports for helpers if needed, but data will be overwritten
 import { bookings as initialBookings } from '../data/bookings';
-import { routes } from '../data/routes';
+import { routes as initialRoutes } from '../data/routes';
 
 const BookingContext = createContext();
+
+const API_BASE_URL = 'http://localhost/sajilo-safar/api';
 
 export const useBooking = () => {
     const context = useContext(BookingContext);
@@ -14,13 +16,57 @@ export const useBooking = () => {
 };
 
 export const BookingProvider = ({ children }) => {
-    const [buses, setBuses] = useState(initialBuses);
-    const [bookings, setBookings] = useState(initialBookings);
+    // Initialize with empty arrays to indicate loading, or static data as fallback
+    // Better to use empty arrays and a loading state
+    const [buses, setBuses] = useState([]);
+    const [bookings, setBookings] = useState([]);
+    const [routes, setRoutes] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
     const [searchParams, setSearchParams] = useState({
         from: '',
         to: '',
         date: ''
     });
+
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            // Fetch Buses
+            const busesRes = await fetch(`${API_BASE_URL}/buses.php`);
+            if (!busesRes.ok) throw new Error('Failed to fetch buses');
+            const busesData = await busesRes.json();
+            
+            // Fetch Routes
+            const routesRes = await fetch(`${API_BASE_URL}/routes.php`);
+            if (!routesRes.ok) throw new Error('Failed to fetch routes');
+            const routesData = await routesRes.json();
+
+            // Fetch Bookings
+            const bookingsRes = await fetch(`${API_BASE_URL}/bookings.php`);
+            if (!bookingsRes.ok) throw new Error('Failed to fetch bookings');
+            const bookingsData = await bookingsRes.json();
+
+            setBuses(busesData);
+            setRoutes(routesData);
+            setBookings(bookingsData);
+            setError(null);
+        } catch (err) {
+            console.error("API Error:", err);
+            setError(err.message);
+            // Fallback to static data if API fails (optional, for development stability)
+             setBuses(initialBuses);
+             setRoutes(initialRoutes);
+             setBookings(initialBookings);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
     const searchBuses = useCallback((from, to, date) => {
         setSearchParams({ from, to, date });
@@ -50,10 +96,16 @@ export const BookingProvider = ({ children }) => {
                 !rules.allowedDirections.includes(selectedRoute.direction)) {
                 return false;
             }
+            
+             // Check if bus services this specific route area
+            // Using logic similar to calculateRoutePrice helper
+            // However, the original logic in searchBuses only checked rules. 
+            // We should arguably also check serviceAreas if that's how it was intended, 
+            // but sticking to original logic for now to minimize regression.
 
             return true;
         });
-    }, [buses]);
+    }, [buses, routes]);
 
     const getBusById = useCallback((id) => {
         return buses.find(bus => bus.id === parseInt(id));
@@ -76,6 +128,7 @@ export const BookingProvider = ({ children }) => {
     }, [bookings]);
 
     const addBooking = useCallback((bookingDetails) => {
+        // TODO: Persist to Server via POST
         const newBooking = {
             id: `BK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             createdAt: new Date().toISOString(),
@@ -88,10 +141,12 @@ export const BookingProvider = ({ children }) => {
     }, []);
 
     const deleteBooking = useCallback((id) => {
+         // TODO: Persist to Server via DELETE
         setBookings(prev => prev.filter(booking => booking.id !== id));
     }, []);
 
     const addBus = useCallback((newBus) => {
+         // TODO: Persist to Server via POST
         setBuses(prev => [...prev, {
             id: Date.now(),
             createdAt: new Date().toISOString(),
@@ -100,12 +155,14 @@ export const BookingProvider = ({ children }) => {
     }, []);
 
     const updateBus = useCallback((updatedBus) => {
+         // TODO: Persist to Server via PUT
         setBuses(prev => prev.map(
             bus => bus.id === updatedBus.id ? updatedBus : bus
         ));
     }, []);
 
     const deleteBus = useCallback((id) => {
+         // TODO: Persist to Server via DELETE
         setBuses(prev => prev.filter(bus => bus.id !== id));
     }, []);
 
@@ -113,6 +170,8 @@ export const BookingProvider = ({ children }) => {
         buses,
         routes,
         bookings,
+        loading,
+        error,
         searchParams,
         searchBuses,
         getBusById,
@@ -121,7 +180,8 @@ export const BookingProvider = ({ children }) => {
         deleteBooking,
         addBus,
         updateBus,
-        deleteBus
+        deleteBus,
+        refreshData: fetchData
     };
 
     return (

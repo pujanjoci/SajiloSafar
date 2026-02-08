@@ -1,14 +1,15 @@
 // components/Routes.jsx
 import React from 'react';
-import { routes } from '../../data/routes';
 import { cityImages } from '../../utils/cityImages';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext'; // Import AuthContext
+import { useBooking } from '../../context/BookingContext';
 import { MapPin, Navigation, ArrowRight } from 'lucide-react';
 
 const Routes = () => {
     const navigate = useNavigate();
     const { isAuthenticated } = useAuth(); // Get authentication status
+    const { routes } = useBooking();
 
     const handleRouteClick = (routeFrom, routeTo) => {
         // Check if user is authenticated

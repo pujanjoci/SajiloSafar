@@ -1,11 +1,36 @@
-import React from 'react';
-import { useBooking } from '../../context/BookingContext';
+import React, { useState, useEffect } from 'react';
+// import { useBooking } from '../../context/BookingContext';
 import AdminTable from '../../components/admin/ui/AdminTable';
 import StatusBadge from '../../components/admin/ui/StatusBadge';
 import { Eye, Edit2 } from 'lucide-react';
 
 const ManageBookings = () => {
-    const { bookings, deleteBooking } = useBooking();
+    const [bookings, setBookings] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        fetchBookings();
+    }, []);
+
+    const fetchBookings = async () => {
+        try {
+            const response = await fetch('http://localhost/sajilo-safar/api/bookings.php');
+            if (!response.ok) throw new Error('Failed to fetch bookings');
+            const data = await response.json();
+            setBookings(data);
+        } catch (error) {
+            console.error('Error fetching bookings:', error);
+            setError('Failed to load bookings');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const deleteBooking = (id) => {
+        // Placeholder for delete
+        console.log("Delete booking", id);
+    };
 
     const columns = [
         {
@@ -66,11 +91,17 @@ const ManageBookings = () => {
                 {/* Export or Filter Actions could go here */}
             </div>
 
-            <AdminTable
-                columns={columns}
-                data={bookings}
-                searchPlaceholder="Search by name, ID..."
-            />
+            {loading ? (
+                <div className="p-8 text-center text-gray-500">Loading bookings...</div>
+            ) : error ? (
+                <div className="p-8 text-center text-red-500">{error}</div>
+            ) : (
+                <AdminTable
+                    columns={columns}
+                    data={bookings}
+                    searchPlaceholder="Search by name, ID..."
+                />
+            )}
         </div>
     );
 };

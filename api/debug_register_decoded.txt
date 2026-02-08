@@ -1,0 +1,7 @@
+stdClass Object
+(
+    [name] => Test
+    [email] => test@test.com
+    [phone] => 9860928585
+    [password] => test123
+)
